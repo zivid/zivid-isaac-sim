@@ -22,9 +22,11 @@ from utilities import enable_zivid_extension
 
 enable_zivid_extension()  # enable the Zivid extension
 
-from isaacsim.core.api import World # pylint: disable=C0412
+
+from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.zivid.camera import SamplingMode, ZividCamera, ZividCameraModelName, spawn_zivid_caseing
+from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName, spawn_zivid_caseing
+from isaacsim.zivid.utilities.fov import draw_fov
 from isaacsim.zivid.utilities.transforms import Rotation, Transform
 
 my_world = World(stage_units_in_meters=1.0)
@@ -34,35 +36,50 @@ set_camera_view(
     eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp"
 )  # set camera view
 
+
+# Create a Zivid camera
+
+
 model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
-zivid_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.identity())
+zivid_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])))
 zivid_prim_path = "/World/ZividCamera"
 
 
-spawn_zivid_caseing(
+zivid_prim = spawn_zivid_caseing(
     model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
 )
 
-zivid_prim_path = "/World/ZividCamera1"
-
-spawn_zivid_caseing(
-    model_name=model_name,
-    prim_path=zivid_prim_path,
-    world_pose=zivid_pose,
-    make_rigid_body=True,
-)
 
 zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim_path)
 
+# initialize the world
 my_world.reset()
 zivid_camera.initialize()
 
-zivid_camera.set_sampling_mode(SamplingMode.DOWNSAMPLE4X4)
+
+i = 0
+models = list(ZividCameraModelName)
+num_models = len(models)
+model_counter = 0
+zivid_camera.set_camera_model(models[model_counter])  # Set the initial model
 
 while simulation_app.is_running():
     my_world.step(render=True)  # step the world
+    # arm.set_joint_positions(arm.get_joints_default_state().positions)
+    rgb = zivid_camera.get_data_rgb()
+    if i > 0 and i % 20 == 0 and model_counter < num_models:
+        print(f"Switched to model: {models[model_counter].name}")
+
+        draw_fov(zivid_camera)
+        model_counter += 1
+        if model_counter >= num_models:
+            model_counter = 0
+        zivid_camera.set_camera_model(models[model_counter])
+
+    i += 1
+
 
 simulation_app.close()
