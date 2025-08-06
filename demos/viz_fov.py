@@ -7,29 +7,34 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-from isaacsim import SimulationApp
-
-simulation_app = SimulationApp(
-    {"headless": False, "enable_cameras": True},
-)  # start the simulation app, with GUI open
-
+# flake8: noqa: E402
+# pylint: disable=C0413,C0103
+import argparse
 
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
-from isaacsim.core.api import World
+from isaacsim import SimulationApp
+
+parser = argparse.ArgumentParser(description="Example script with --headless flag")
+parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+parser.add_argument("--num-frames", type=int, default=-1, help="Number of frames to run, -1 for infinite")
+args = parser.parse_args()
+
+simulation_app = SimulationApp(
+    {"headless": args.headless, "enable_cameras": True},
+)
+
+from utilities import enable_zivid_extension
+
+enable_zivid_extension()  # enable the Zivid extension
+
+from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.util.debug_draw._debug_draw import acquire_debug_draw_interface
-import carb
-
-from isaacsim.zivid.assembler.assemble import assemble_zivid
-from isaacsim.zivid.cameras.models import ZividCameraModelName
-from isaacsim.zivid.cameras.zivid_camera import ZividCamera
-from isaacsim.zivid.utilities.transforms import Transform, Rotation, transform_points
+from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName, spawn_zivid_casing
 from isaacsim.zivid.utilities.fov import draw_fov
-
+from isaacsim.zivid.utilities.transforms import Rotation, Transform
 
 my_world = World(stage_units_in_meters=1.0)
+assert isinstance(my_world, World), "World instance should be created successfully"
 my_world.scene.add_default_ground_plane()  # add ground plane
 set_camera_view(
     eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp"
@@ -40,11 +45,11 @@ set_camera_view(
 
 
 model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
-zivid_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.identity())
+zivid_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])))
 zivid_prim_path = "/World/ZividCamera"
 
 
-zivid_prim_path = assemble_zivid(
+zivid_prim = spawn_zivid_casing(
     model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
@@ -62,7 +67,7 @@ zivid_camera.initialize()
 i = 0
 
 
-while simulation_app.is_running():
+while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():
     my_world.step(render=True)  # step the world
     # arm.set_joint_positions(arm.get_joints_default_state().positions)
     rgb = zivid_camera.get_data_rgb()

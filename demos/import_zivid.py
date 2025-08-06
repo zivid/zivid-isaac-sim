@@ -7,70 +7,53 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-from isaacsim import SimulationApp
-
-simulation_app = SimulationApp(
-    {"headless": False, "enable_cameras": True},
-)  # start the simulation app, with GUI open
-
+# flake8: noqa: E402
+# pylint: disable=C0413,C0103
+import argparse
 
 import numpy as np
-import matplotlib.pyplot as plt
-import cv2
-from isaacsim.core.api import World
+from isaacsim import SimulationApp
+
+parser = argparse.ArgumentParser(description="Example script with --headless flag")
+parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+parser.add_argument("--num-frames", type=int, default=-1, help="Number of frames to run, -1 for infinite")
+args = parser.parse_args()
+
+simulation_app = SimulationApp(
+    {"headless": args.headless, "enable_cameras": True},
+)
+
+from utilities import enable_zivid_extension
+
+enable_zivid_extension()  # enable the Zivid extension
+
+from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.zivid.assembler.assemble import assemble_zivid
-from isaacsim.zivid.cameras.models import ZividCameraModelName
-from isaacsim.zivid.cameras.zivid_camera import ZividCamera
-from isaacsim.zivid.cameras.resolution import Resolution, SamplingMode
-from isaacsim.zivid.utilities.transforms import Transform, Rotation
-
-
-def depthmap_from_xyz(xyz, min_depth=0.5, max_depth=4.0):
-    """Converts structured point cloud to a color depth map with NaN handling."""
-    depth = xyz[:, :, 2]  # Z-channel
-
-    # Create a mask for valid depth values
-    valid_mask = np.isfinite(depth)
-    depth_clipped = np.clip(depth, min_depth, max_depth)
-    depth_normalized = np.zeros_like(depth_clipped, dtype=np.float32)
-    depth_normalized[valid_mask] = (depth_clipped[valid_mask] - min_depth) / (max_depth - min_depth)
-
-    depth_8bit = (depth_normalized * 255).astype(np.uint8)
-    depth_colored = cv2.applyColorMap(depth_8bit, cv2.COLORMAP_JET)
-
-    # Color invalid pixels (NaNs) as black
-    depth_colored[~valid_mask] = [0, 0, 0]
-
-    return depth_colored
-
+from isaacsim.zivid.camera import SamplingMode, ZividCamera, ZividCameraModelName, spawn_zivid_casing
+from isaacsim.zivid.utilities.transforms import Rotation, Transform
 
 my_world = World(stage_units_in_meters=1.0)
+assert isinstance(my_world, World), "World instance should be created successfully"
 my_world.scene.add_default_ground_plane()  # add ground plane
 set_camera_view(
     eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp"
 )  # set camera view
-
-
-# Create a Zivid camera
-
 
 model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
 zivid_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.identity())
 zivid_prim_path = "/World/ZividCamera"
 
 
-zivid_prim_path = assemble_zivid(
+spawn_zivid_casing(
     model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
 )
 
-
 zivid_prim_path = "/World/ZividCamera1"
 
-zivid_prim_path = assemble_zivid(
+spawn_zivid_casing(
     model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
@@ -79,27 +62,14 @@ zivid_prim_path = assemble_zivid(
 
 zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim_path)
 
-# initialize the world
 my_world.reset()
 zivid_camera.initialize()
 
 zivid_camera.set_sampling_mode(SamplingMode.DOWNSAMPLE4X4)
 
-
 i = 0
-
-
-while simulation_app.is_running():
+while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():
     my_world.step(render=True)  # step the world
-    # arm.set_joint_positions(arm.get_joints_default_state().positions)
-    rgb = zivid_camera.get_data_rgb()
-    if i > 0 and i % 10 == 0:
-        xyz = zivid_camera.get_data_xyz()
-        depth_map = depthmap_from_xyz(xyz, min_depth=0, max_depth=2.5)
-        plt.imsave("depth.png", depth_map)
-        # print("saved depth map")
-
     i += 1
-
 
 simulation_app.close()

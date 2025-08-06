@@ -7,36 +7,41 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
 
-from isaacsim import SimulationApp
+# flake8: noqa: E402
+# pylint: disable=C0413,C0103
 
-simulation_app = SimulationApp(
-    {"headless": False, "enable_cameras": True},
-)  # start the simulation app, with GUI open
 
+import argparse
 import sys
 
 import carb
-import numpy as np
-import matplotlib.pyplot as plt
 import cv2
-from isaacsim.core.api import World
-from isaacsim.core.prims import Articulation, RigidPrim, GeometryPrim, SingleXFormPrim
-from isaacsim.core.utils.stage import add_reference_to_stage, get_stage_units
-from isaacsim.core.utils.types import ArticulationAction
-from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.core.api.objects.cuboid import FixedCuboid
-from isaacsim.storage.native import get_assets_root_path
-from isaacsim.core.utils import prims as prim_utils
-from isaacsim.core.utils.rotations import rot_matrix_to_quat, quat_to_rot_matrix
-from pxr import UsdPhysics, Gf
-from isaacsim.core.api.materials.preview_surface import PreviewSurface
+import numpy as np
+from isaacsim import SimulationApp
 
-from isaacsim.zivid.cameras.zivid_camera import ZividCamera, ZividCameraModelName
-from isaacsim.zivid.assembler.assemble import assemble_zivid_on_robot
-from isaacsim.zivid.assembler.mounts import Mount, Mount, attach_mount_to_robot
-from isaacsim.zivid.cameras.resolution import SamplingMode
-from isaacsim.zivid.utilities.transforms import Transform, Rotation
-from isaacsim.zivid.utilities.assets import get_assets_path
+parser = argparse.ArgumentParser(description="Example script with --headless flag")
+parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+parser.add_argument("--num-frames", type=int, default=-1, help="Number of frames to run, -1 for infinite")
+args = parser.parse_args()
+
+simulation_app = SimulationApp(
+    {"headless": args.headless, "enable_cameras": True},
+)
+
+print("Zivid extension enabled.")
+from utilities import enable_zivid_extension
+
+enable_zivid_extension()  # enable the Zivid extension
+
+from isaacsim.core.api import World  # pylint: disable=C0412
+from isaacsim.core.prims import SingleArticulation, SingleRigidPrim
+from isaacsim.core.utils.stage import add_reference_to_stage, get_stage_units
+from isaacsim.core.utils.viewports import set_camera_view
+from isaacsim.storage.native import get_assets_root_path
+from isaacsim.zivid.assembler import assemble_zivid_casing_on_robot
+from isaacsim.zivid.camera import ZividCameraModelName
+from isaacsim.zivid.mounts import Mount
+from isaacsim.zivid.utilities.transforms import Rotation, Transform
 
 
 def depthmap_from_xyz(xyz, min_depth=0.5, max_depth=4.0):
@@ -66,6 +71,7 @@ if assets_root_path is None:
     sys.exit()
 
 my_world = World(stage_units_in_meters=1.0)
+assert isinstance(my_world, World)
 my_world.scene.add_default_ground_plane()  # add ground plane
 set_camera_view(
     eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp"
@@ -76,13 +82,13 @@ asset_path = assets_root_path + "/Isaac/Robots/Franka/franka.usd"
 
 
 add_reference_to_stage(usd_path=asset_path, prim_path="/World/Arm")  # add robot to stage
-arm = Articulation(prim_paths_expr="/World/Arm", name="my_arm")  # create an articulation object
+arm = SingleArticulation("/World/Arm", name="my_arm")  # create an articulation object
 
 
 # set the initial poses of the arm and the car so they don't collide BEFORE the simulation starts
-arm.set_world_poses(positions=np.array([[0.0, 1.0, 0.0]]) / get_stage_units())
+arm.set_world_pose(position=np.array([0.0, 1.0, 0.0]) / get_stage_units())
 
-
+my_world.scene.add(arm)  # add the arm to the world
 # Create a Zivid camera
 
 
@@ -94,7 +100,11 @@ mount_local_pose = Transform(
 
 model_name = ZividCameraModelName.ZIVID_2_PLUS_MR130
 
-zivid_prim_path = assemble_zivid_on_robot(
+
+# initialize the world
+my_world.reset()
+
+ass = assemble_zivid_casing_on_robot(
     model_name=model_name,
     attach_prim_path="/World/Arm/panda_hand",
     robot_prim_path="/World/Arm",
@@ -102,57 +112,22 @@ zivid_prim_path = assemble_zivid_on_robot(
     mount_local_pose=mount_local_pose,
 )  # mount.zivid_mount_frame.R.as_quat().tolist(),
 
+my_world.reset()  # reset the world to apply the changes
+# arm = Articulation(prim_paths_expr="/World/Arm", name="my_arm")  # re-create articulation object
 
-zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim_path)
-
-cube = FixedCuboid(
-    prim_path="/World/cube",
-    name="cube",
-    translation=[0.8, 1.0, 0.18],
-    size=0.05,
-)
-
-cube.set_visibility(False)
-
-# initialize the world
-my_world.reset()
-zivid_camera.initialize()
-zivid_camera.set_sampling_mode(SamplingMode.DOWNSAMPLE4X4)
-
+arm = SingleArticulation("/World/Arm", name="my_arm")  # create an articulation object
 
 i = 0
 
+attach_prim = SingleRigidPrim("/World/Arm/panda_hand", name="attach_prim")
+mount_prim = ass.mount_prim
 
-while simulation_app.is_running():
 
+while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():
     my_world.step(render=True)  # step the world
-
-    if i == 60:
-        add_reference_to_stage(
-            usd_path=str(get_assets_path() / "CB02.usd"),
-            prim_path="/World/CB01",
-        )  # add robot to stage
-
-        sensor_pose = zivid_camera.get_sensor_world_pose()
-        board = SingleXFormPrim(prim_path="/World/CB01", name="board")
-        cam_to_board = Transform(
-            t=np.array([-0.1, -0.1, 0.6]), rot=Rotation.from_axis_angle(np.array([-np.pi / 2, 0.0, 0.0]))
-        )
-        board_pose = sensor_pose * cam_to_board  # board pose in world frame
-        board.set_world_pose(*board_pose.to_isaac_sim())
-
-    # arm.set_joint_positions(arm.get_joints_default_state().positions)
-    if i > 0 and i % 30 == 0:
-        rgb = zivid_camera.get_data_rgb()
-        plt.imsave("rgb.png", rgb)
-
-    if i > 0 and i % 30 == 0:
-        xyz = zivid_camera.get_data_xyz()
-        depth_map = depthmap_from_xyz(xyz, min_depth=0, max_depth=2.5)
-        plt.imsave("depth.png", depth_map)
-        # print("saved depth map")
-
+    attach_pose = Transform.from_isaac_sim(attach_prim.get_world_pose())
+    mount_pose = Transform.from_isaac_sim(mount_prim.get_world_pose())
+    zivid_pose = Transform.from_isaac_sim(ass.zivid_prim.get_world_pose())
     i += 1
-
 
 simulation_app.close()

@@ -1,0 +1,126 @@
+[package]
+
+# Note: Semantic Versioning is used: https://semver.org/
+version = "0.1.0"
+
+authors = ["Zivid"]
+
+# Description
+title = "Zivid 3D Cameras"
+description="Extension providing virtual Zivid 3D Cameras"
+readme  = "docs/README.md"
+repository = "https://github.com/zivid/zivid-isaac-sim"
+category = "simulation"
+keywords = ["kit", "robotics", "Sensor", "Zivid"]
+
+icon = "assets/ZividStudio.png"
+use_online_index=true
+
+[core]
+reloadable = true
+
+[[python.module]]
+name = "isaacsim.zivid"
+
+[dependencies]
+"isaacsim.gui.menu" = {}
+"omni.kit.widget.context_menu" = {}
+"isaacsim.sensors.camera" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.util.debug_draw" = {}
+"omni.kit.widget.live_session_management" = {}
+
+
+[[python.module]]
+name = "isaacsim.zivid.camera"
+
+[[python.module]]
+name = "isaacsim.zivid.mounts"
+
+[[python.module]]
+name = "isaacsim.zivid.calibration"
+
+[[python.module]]
+name = "isaacsim.zivid.assembler"
+
+[[test]]
+name="camera"
+enabled = true
+dependencies = [
+    "omni.kit.test",
+    "omni.kit.ui_test",  # UI testing extension
+    
+]
+
+pythonTests.include = ["isaacsim.zivid.camera.*"]
+
+
+
+args = [
+    '--/app/settings/fabricDefaultStageFrameHistoryCount=3',
+    '--/app/file/ignoreUnsavedOnExit=1',
+    '--/app/asyncRendering=0'
+]
+
+[[test]]
+name="mounts"
+enabled = true
+dependencies = [
+    "omni.kit.test",
+    "omni.kit.ui_test",  # UI testing extension
+    
+]
+
+pythonTests.include = ["isaacsim.zivid.mounts.*"]
+
+
+args = [
+    '--/app/settings/fabricDefaultStageFrameHistoryCount=3',
+    '--/app/file/ignoreUnsavedOnExit=1',
+    '--/app/asyncRendering=0'
+]
+
+[[test]]
+name="calibration"
+enabled = true
+dependencies = [
+    "omni.kit.test",
+    "omni.kit.ui_test",  # UI testing extension
+    
+]
+
+pythonTests.include = ["isaacsim.zivid.calibration.*"]
+
+
+args = [
+    '--/app/settings/fabricDefaultStageFrameHistoryCount=3',
+    '--/app/file/ignoreUnsavedOnExit=1',
+    '--/app/asyncRendering=0'
+]
+
+[[test]]
+name="assembler"
+enabled = true
+dependencies = [
+    "omni.kit.test",
+    "omni.kit.ui_test",  # UI testing extension
+    
+]
+
+pythonTests.include = ["isaacsim.zivid.assembler.*"]
+
+
+args = [
+    '--/app/settings/fabricDefaultStageFrameHistoryCount=3',
+    '--/app/file/ignoreUnsavedOnExit=1',
+    '--/app/asyncRendering=0'
+]
+
+[[test]]
+name = "startup"
+enabled = true
+
+
+args = [
+    '--/app/settings/fabricDefaultStageFrameHistoryCount=3',
+]
