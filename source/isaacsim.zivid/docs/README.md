@@ -8,9 +8,7 @@ cameras to your simulation with correct dimensions, masses and camera
 intrinsics.
 
 > [!WARNING]
-> This is a highly experimental extension which is still in development. There
-> are known and unknown bugs and the presented API and GUI will most likely
-> change drastically as we improve.
+> This extension is experimental. API and GUI are subject to changes.
 
 ![Zivid Image](zivid-generic-github-header-small.png)
 
