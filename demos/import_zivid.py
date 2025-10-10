@@ -12,7 +12,7 @@
 import argparse
 
 import numpy as np
-from isaacsim import SimulationApp
+from isaacsim import SimulationApp  # pyright: ignore
 
 parser = argparse.ArgumentParser(description="Example script with --headless flag")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -30,7 +30,7 @@ enable_zivid_extension()  # enable the Zivid extension
 from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.zivid.camera import SamplingMode, ZividCamera, ZividCameraModelName, spawn_zivid_casing
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
 
 my_world = World(stage_units_in_meters=1.0)
 assert isinstance(my_world, World), "World instance should be created successfully"
@@ -45,7 +45,6 @@ zivid_prim_path = "/World/ZividCamera"
 
 
 spawn_zivid_casing(
-    model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
@@ -54,7 +53,6 @@ spawn_zivid_casing(
 zivid_prim_path = "/World/ZividCamera1"
 
 spawn_zivid_casing(
-    model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=True,

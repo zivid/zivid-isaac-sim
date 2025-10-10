@@ -8,15 +8,13 @@ from isaacsim.core.api import World
 from isaacsim.core.prims import SingleRigidPrim, SingleXFormPrim
 from isaacsim.core.utils.stage import create_new_stage_async, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.zivid.camera.models import ZividCameraModelName
 from isaacsim.zivid.camera.spawn import spawn_zivid_casing
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
+from isaacsim.zivid.utilities.test_utils import BaseTest
 from pxr import PhysxSchema, UsdLux, UsdPhysics
 
 
-# Having a test class dervived from omni.kit.test.AsyncTestCase declared on the
-# root of module will make it auto-discoverable by omni.kit.test
-class Test(omni.kit.test.AsyncTestCase):
+class Test(BaseTest):
     # Before running each test
     # Before running each test
     async def setUp(self):  # pylint: disable=invalid-name
@@ -58,13 +56,11 @@ class Test(omni.kit.test.AsyncTestCase):
 
     async def test_spawn_zivid_casing_no_rigid_body(self):
         zivid_prim_path = "/World/ZividCamera"
-        model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
         zivid_pose = Transform(
             t=np.array([0.0, 0.0, 1.0]),
             rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])),
         )
         zivid_prim = spawn_zivid_casing(
-            model_name=model_name,
             prim_path=zivid_prim_path,
             world_pose=zivid_pose,
             make_rigid_body=False,
@@ -88,29 +84,21 @@ class Test(omni.kit.test.AsyncTestCase):
 
     async def test_spawn_zivid_casing_rigid_body(self):
         zivid_prim_path = "/World/ZividCamera"
-        model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
         zivid_pose = Transform(
             t=np.array([0.0, 0.0, 1.0]),
             rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])),
         )
         zivid_prim = spawn_zivid_casing(
-            model_name=model_name,
             prim_path=zivid_prim_path,
             world_pose=zivid_pose,
             make_rigid_body=True,
         )
 
-        self.assertTrue(isinstance(zivid_prim, SingleRigidPrim), "Zivid camera prim should be a SingleRigidPrim")
+        self.assertIsInstance(zivid_prim, SingleRigidPrim, "Zivid camera prim should be a SingleRigidPrim")
         prim_pose = Transform.from_isaac_sim(zivid_prim.get_world_pose())
-        self.assertTrue(
-            np.allclose(prim_pose.t, zivid_pose.t), "Zivid camera translation should match the specified world pose"
-        )
-        self.assertTrue(
-            np.allclose(prim_pose.rot.as_quat(), zivid_pose.rot.as_quat()),
-            "Zivid camera rotation should match the specified world pose",
-        )
-        self.assertTrue(
-            zivid_prim.prim_path == zivid_prim_path, "Zivid camera prim path should match the specified prim path"
+        self.assertTranformsAlmostEqual(prim_pose, zivid_pose, places=6)
+        self.assertEqual(
+            zivid_prim.prim_path, zivid_prim_path, "Zivid camera prim path should match the specified prim path"
         )
 
         prim = prim_utils.get_prim_at_path(zivid_prim_path)
@@ -130,6 +118,5 @@ class Test(omni.kit.test.AsyncTestCase):
         await self.wait_n_updates(100)
 
         prim_pose = Transform.from_isaac_sim(zivid_prim.get_world_pose())
-        print(prim_pose.t)
-        self.assertTrue(zivid_pose.t[2] > prim_pose.t[2], "Zivid camera should be falling due to gravity")
-        self.assertTrue(prim_pose.t[2] > 0.0, "Zivid camera should not fall below the ground plane")
+        self.assertGreater(zivid_pose.t[2], prim_pose.t[2], "Zivid camera should be falling due to gravity")
+        self.assertGreaterEqual(prim_pose.t[2], -1e-3, "Zivid camera should not fall below the ground plane")

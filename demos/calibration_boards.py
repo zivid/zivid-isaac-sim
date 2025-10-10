@@ -11,11 +11,10 @@
 # pylint: disable=C0413,C0103
 
 import argparse
-import math
 
 import carb
 import numpy as np
-from isaacsim import SimulationApp
+from isaacsim import SimulationApp  # pyright: ignore
 
 parser = argparse.ArgumentParser(description="Example script with --headless flag")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -33,42 +32,19 @@ enable_zivid_extension()
 from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.util.debug_draw._debug_draw import acquire_debug_draw_interface
-from isaacsim.zivid.calibration.calibration_board import BoardID
-from isaacsim.zivid.calibration.detector import detect_calibration_board
-from isaacsim.zivid.calibration.spawn import spawn_calibration_board
+from isaacsim.zivid.calibration import BoardID, DetectionResult, detect_calibration_board, spawn_calibration_board
+from isaacsim.zivid.camera import SamplingMode, ZividCameraModelName
 from isaacsim.zivid.camera.spawn import spawn_zivid_casing
 from isaacsim.zivid.camera.zivid_camera import ZividCamera
-from isaacsim.zivid.camera.zivid_camera_model import ZividCameraModelName
-from isaacsim.zivid.utilities.transforms import Rotation, Transform, transform_points
+from isaacsim.zivid.transforms import Rotation, Transform, transform_points
 
 draw = acquire_debug_draw_interface()
 
 
-def visualize_points_detection(points_2d: np.ndarray, xyz: np.ndarray, pose: Transform):  # pylint: disable=W0621
-    points_3d = []
-    xyz = transform_points(xyz, pose)
-
-    for point in points_2d:
-        x = point[0, 0]
-        y = point[0, 1]
-
-        xl = math.floor(x)
-        xu = math.ceil(x)
-        yl = math.floor(y)
-        yu = math.ceil(y)
-
-        alpha = x - xl
-        beta = y - yl
-
-        p00 = xyz[yl, xl]
-        p01 = xyz[yl, xu]
-        p10 = xyz[yu, xl]
-        p11 = xyz[yu, xu]
-
-        p0 = p00 * (1 - alpha) + p01 * alpha
-        p1 = p10 * (1 - alpha) + p11 * alpha
-        p = p0 * (1 - beta) + p1 * beta
-        points_3d.append(carb.Float3(p.tolist()))
+def visualize_points_detection(detection_result: DetectionResult, pose: Transform):  # pylint: disable=W0621
+    points_3d = [
+        carb.Float3(p.tolist()) for p in transform_points(detection_result.feature_points_3d, pose).reshape(-1, 3)
+    ]
 
     draw.clear_points()
     draw.draw_points(
@@ -82,7 +58,7 @@ my_world = World(stage_units_in_meters=1.0)
 assert isinstance(my_world, World), "World instance should be created successfully"
 my_world.scene.add_default_ground_plane()  # add ground plane
 set_camera_view(
-    eye=[5.0, 0.0, 1.5], target=[0.00, 0.00, 1.00], camera_prim_path="/OmniverseKit_Persp"
+    eye=[-0.5, -0.1, 0.5], target=[0.00, -0.1, 0.1], camera_prim_path="/OmniverseKit_Persp"
 )  # set camera view
 
 
@@ -95,7 +71,6 @@ zivid_prim_path = "/World/ZividCamera"
 
 
 zivid_prim = spawn_zivid_casing(
-    model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
@@ -118,7 +93,7 @@ cb02 = spawn_calibration_board(
 cb02.set_visibility(False)  # hide the board for now
 
 
-zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim.prim_path)
+zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim.prim_path, sampling_mode=SamplingMode.FULL)
 
 # initialize the world
 my_world.reset()
@@ -127,32 +102,32 @@ zivid_camera.initialize()
 for _ in range(10):
     my_world.step(render=True)  # step the world
 
-pose = zivid_camera.get_sensor_world_pose()
-rgb = zivid_camera.get_data_rgb()
-xyz = zivid_camera.get_data_xyz()
+pose = zivid_camera.get_camera_sensor_world_pose()
+frame = zivid_camera.get_frame()
 
 
-corners = detect_calibration_board(rgb)
+detection_result = detect_calibration_board(frame)
+visualize_points_detection(detection_result, pose)
 
-visualize_points_detection(corners, xyz, pose)
 
-for _ in range(50):
+for _ in range(60):
     my_world.step(render=True)  # step the world
 
 draw.clear_points()
 
+
 cb01.set_visibility(False)
 cb02.set_visibility(True)  # show the second board
 
-my_world.step(render=True)  # step the world
+for _ in range(10):
+    my_world.step(render=True)  # step the world
 
-pose = zivid_camera.get_sensor_world_pose()
-rgb = zivid_camera.get_data_rgb()
-xyz = zivid_camera.get_data_xyz()
+pose = zivid_camera.get_camera_sensor_world_pose()
 
-corners = detect_calibration_board(rgb)
+frame = zivid_camera.get_frame()
+detection_result = detect_calibration_board(frame)
 
-visualize_points_detection(corners, xyz, pose)
+visualize_points_detection(detection_result, pose)
 
 i = 0
 while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():

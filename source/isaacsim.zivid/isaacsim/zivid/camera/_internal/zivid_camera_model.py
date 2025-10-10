@@ -3,19 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from isaacsim.zivid.camera.camera_calibration import CameraCalibration
+from isaacsim.zivid.camera._impl.camera_calibration import CameraCalibration
 from isaacsim.zivid.camera.models import ZividCameraModelName
-from isaacsim.zivid.camera.resolution import SamplingMode, get_camera_resolution, get_projector_resolution
-from isaacsim.zivid.utilities.omniverse_camera_params import OmniverseCameraParams
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.camera.sampling import SamplingMode
+from isaacsim.zivid.transforms import Rotation, Transform
 from numpy.typing import NDArray
 
 
 @dataclass
 class ZividCameraModel:
     name: ZividCameraModelName
-    camera_sensor_model: OmniverseCameraParams
-    projector_sensor_model: OmniverseCameraParams
     optical_frame: Transform
     calibration: CameraCalibration
 
@@ -27,28 +24,9 @@ class ZividCameraModel:
             model_name=model_name,
             sampling_mode=sampling_mode,
         )
-        camera_res = get_camera_resolution(sampling_mode, model_name=model_name)
-        projector_res = get_projector_resolution(model_name=model_name)
-        focus_distance = _focus_distance_from_model_name(model_name)
 
         return cls(
             name=model_name,
-            camera_sensor_model=OmniverseCameraParams.from_intrinsic_matrix(
-                intrinsic_matrix=calibration.camera_model.camera_matrix.as_array().flatten().tolist(),
-                pixel_size=calibration.camera_model.pixel_size,
-                width=camera_res.width,
-                height=camera_res.height,
-                clipping_range=(0.00, 10.0),
-                focus_distance=focus_distance,
-            ),
-            projector_sensor_model=OmniverseCameraParams.from_intrinsic_matrix(
-                intrinsic_matrix=calibration.projector_model.camera_matrix.as_array().flatten().tolist(),
-                pixel_size=calibration.projector_model.pixel_size,
-                width=projector_res.width,
-                height=projector_res.height,
-                clipping_range=(0.00, 10.0),
-                focus_distance=focus_distance,
-            ),
             optical_frame=cls.optical_frame_from_model_name(model_name),
             calibration=calibration,
         )
@@ -117,26 +95,3 @@ def _sensor_orientation_from_model_name(model_name: ZividCameraModelName) -> Rot
         )
         * Rotation.y_down_z_forward()
     )
-
-
-def _focus_distance_from_model_name(model_name: ZividCameraModelName) -> float:
-    """Get the focus distance from the given model name."""
-    match model_name:
-        case ZividCameraModelName.ZIVID_2_M70:
-            return 0.7
-        case ZividCameraModelName.ZIVID_2_L100:
-            return 1.0
-        case ZividCameraModelName.ZIVID_2_PLUS_M60:
-            return 0.6
-        case ZividCameraModelName.ZIVID_2_PLUS_L110:
-            return 1.1
-        case ZividCameraModelName.ZIVID_2_PLUS_M130:
-            return 1.3
-        case ZividCameraModelName.ZIVID_2_PLUS_MR60:
-            return 0.6
-        case ZividCameraModelName.ZIVID_2_PLUS_LR110:
-            return 1.1
-        case ZividCameraModelName.ZIVID_2_PLUS_MR130:
-            return 1.3
-        case _:
-            raise ValueError(f"Unknown Zivid camera model name: {model_name}")

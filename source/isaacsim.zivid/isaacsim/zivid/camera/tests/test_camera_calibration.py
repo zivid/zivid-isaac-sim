@@ -1,15 +1,11 @@
-import omni.kit.test
-import omni.usd
-from isaacsim.zivid.camera.camera_calibration import CameraCalibration
+from isaacsim.zivid.camera._impl.camera_calibration import CameraCalibration
+from isaacsim.zivid.camera._impl.resolutions import get_camera_resolution
 from isaacsim.zivid.camera.models import ZividCameraModelName
-from isaacsim.zivid.camera.resolution import SamplingMode
+from isaacsim.zivid.camera.sampling import SamplingMode
+from isaacsim.zivid.utilities.test_utils import BaseTest
 
 
-# Having a test class dervived from omni.kit.test.AsyncTestCase declared on the
-# root of module will make it auto-discoverable by omni.kit.test
-class Test(omni.kit.test.AsyncTestCase):
-    # Before running each test
-    # Before running each test
+class Test(BaseTest):
     async def setUp(self):  # pylint: disable=invalid-name
         return
 
@@ -22,7 +18,13 @@ class Test(omni.kit.test.AsyncTestCase):
             for sampling_mode in SamplingMode:
                 calib = CameraCalibration.from_model_name(model_name, sampling_mode)
                 for lens_model in [calib.camera_model, calib.projector_model]:
-                    self.assertTrue(lens_model.camera_matrix.as_array().shape == (3, 3))
+                    self.assertEqual(lens_model.camera_matrix.to_array().shape, (3, 3))
+                    self.assertEqual(lens_model.distortion_coefficients.to_array().shape, (12,))
+                self.assertEqual(
+                    calib.camera_model.resolution,
+                    get_camera_resolution(sampling_mode, model_name),
+                    "camera resolution mismatch",
+                )
 
     async def test_throws_if_invalid_model_name(self):
         with self.assertRaises(ValueError):

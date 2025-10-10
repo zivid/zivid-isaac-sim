@@ -1,45 +1,38 @@
 import asyncio
-from pathlib import Path
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import omni.kit.test
 import omni.usd
 from isaacsim.core.api import World
-from isaacsim.core.utils.stage import add_reference_to_stage, create_new_stage_async, update_stage_async
+from isaacsim.core.prims import SingleXFormPrim
+from isaacsim.core.utils import prims as prim_utils
+from isaacsim.core.utils.stage import create_new_stage_async, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.storage.native import get_assets_root_path
+from isaacsim.zivid.camera._impl.resolutions import get_camera_resolution
 from isaacsim.zivid.camera.models import ZividCameraModelName
-from isaacsim.zivid.camera.resolution import SamplingMode, get_camera_resolution
+from isaacsim.zivid.camera.sampling import SamplingMode
 from isaacsim.zivid.camera.spawn import spawn_zivid_casing
 from isaacsim.zivid.camera.zivid_camera import ZividCamera
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
+from isaacsim.zivid.utilities.test_utils import BaseTest
 from pxr import UsdLux
 
 
-# Having a test class dervived from omni.kit.test.AsyncTestCase declared on the
-# root of module will make it auto-discoverable by omni.kit.test
-class Test(omni.kit.test.AsyncTestCase):
-    # Before running each test
-    # Before running each test
+class Test(BaseTest):
     async def setUp(self):  # pylint: disable=invalid-name
         await create_new_stage_async()
         self.my_world = World(stage_units_in_meters=1.0)
-        self.test_output_dir = Path(__file__).parents[6] / "test_outputs" / "camera" / "test_zivid_camera"
-        self.test_output_dir.mkdir(parents=True, exist_ok=True)
+        assert isinstance(self.my_world, World)
 
         await self.my_world.initialize_simulation_context_async()
         await update_stage_async()
         self.my_world.scene.add_default_ground_plane()
         self.zivid_prim_path = "/World/ZividCamera"
-        model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
         zivid_pose = Transform(
             t=np.array([0.0, 0.0, 1.0]),
             rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])),
         )
         self.zivid_prim = spawn_zivid_casing(
-            model_name=model_name,
             prim_path=self.zivid_prim_path,
             world_pose=zivid_pose,
             make_rigid_body=False,
@@ -87,12 +80,27 @@ class Test(omni.kit.test.AsyncTestCase):
         zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path, sampling_mode=sampling_mode)
         zivid_camera.initialize()
         await self.wait_n_updates(10)  # Wait rendering
-        rgb = zivid_camera.get_data_rgb()
+        frame = zivid_camera.get_frame()
+        rgb = frame.get_data_rgb()
         self.assertIsNotNone(rgb, "RGB data should not be None")
         self.assertEqual(rgb.shape, (resolution.height, resolution.width, 3), "RGB data shape mismatch")
-        xyz = zivid_camera.get_data_xyz()
+        xyz = frame.get_data_xyz()
         self.assertIsNotNone(xyz, "XYZ data should not be None")
         self.assertEqual(xyz.shape, (resolution.height, resolution.width, 3), "XYZ data shape mismatch")
+
+    async def test_capture_infinite_depth(self):
+        pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.from_axis_angle(np.array([0.0, -np.pi / 2, 0.0])))
+        for model_name in ZividCameraModelName:
+            cam = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
+            cam.initialize()
+            cam.set_world_pose(pose)
+            await self.wait_n_updates(10)  # Wait rendering
+            frame = cam.get_frame()
+            xyz = frame.get_data_xyz()
+            self.assertIsNotNone(xyz, "XYZ data should not be None")
+            self.assertTrue(np.all(np.isnan(xyz)), f"XYZ data should be all NaN for {model_name.name}")
+            rgb = frame.get_data_rgb()
+            self.assertIsNotNone(rgb, "RGB data should not be None")
 
     async def test_change_sampling_mode(self):
         model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
@@ -117,138 +125,36 @@ class Test(omni.kit.test.AsyncTestCase):
             zivid_camera.set_camera_model(model_name)
             self.assertEqual(self.zivid_prim.prim.GetAttribute("zivid_camera_model").Get(), model_name.value)
 
-    async def test_get_resolution(self):
+    async def test_set_world_pose(self):
         model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
         zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
         zivid_camera.initialize()
-        for sampling_mode in SamplingMode:
-            zivid_camera.set_sampling_mode(sampling_mode)
-            await self.wait_n_updates(1)
-            current_resolution = zivid_camera.get_camera_resolution()
-            simulated_resolution = zivid_camera.get_camera_sensor().get_resolution()
-            self.assertEqual(
-                current_resolution.width,
-                simulated_resolution[0],
-                "Simulated camera width should match Zivid camera width",
-            )
-            self.assertEqual(
-                current_resolution.height,
-                simulated_resolution[1],
-                "Simulated camera height should match Zivid camera height",
-            )
-
-    async def test_consistent_camera_matrix(self):
-        model_name = ZividCameraModelName.ZIVID_2_L100
-        zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
-        zivid_camera.initialize()
-        for model_name in ZividCameraModelName:
-            zivid_camera.set_camera_model(model_name)
-            for sampling_mode in SamplingMode:
-                zivid_camera.set_sampling_mode(sampling_mode)
-                calib = zivid_camera.get_calibration()
-
-                self.assertTrue(
-                    np.allclose(
-                        calib.camera_model.camera_matrix.as_array(),
-                        zivid_camera.get_camera_sensor().get_intrinsics_matrix(),
-                    ),
-                    "Simulated camera matrix should match Zivid camera matrix",
-                )
-                self.assertTrue(
-                    np.allclose(
-                        calib.projector_model.camera_matrix.as_array(),
-                        zivid_camera.get_projector().get_intrinsics_matrix(),
-                    ),
-                    "Simulated projector matrix should match Zivid projector matrix",
-                )
-
-    async def test_consistent_extrinsics(self):
-        for model_name in ZividCameraModelName:
-            zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
-            zivid_camera.initialize()
-            calib = zivid_camera.get_calibration()
-            sensor_pose = zivid_camera.get_sensor_world_pose()
-            projector_pose = zivid_camera.get_projector_world_pose()
-            simulated_extrinsics = sensor_pose.inverse() * projector_pose
-
-            self.assertTrue(
-                np.allclose(simulated_extrinsics.t, calib.extriniscs.t),
-                "Simulated extrinsics translation should match Zivid extrinsics translation",
-            )
-            self.assertTrue(
-                np.allclose(simulated_extrinsics.rot.as_quat(), calib.extriniscs.rot.as_quat(), atol=1e-7),
-                "Simulated extrinsics rotation should match Zivid extrinsics rotation",
-            )
-
-    async def test_consistent_optical_frame(self):
-        for model_name in ZividCameraModelName:
-            zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
-            zivid_camera.initialize()
-            sensor_pose = zivid_camera.get_sensor_world_pose()
-            case_pose = zivid_camera.get_case_world_pose()
-            simualted_optical_frame = case_pose.inverse() * sensor_pose
-            desired_optical_frame = zivid_camera.get_camera_model().optical_frame
-            self.assertTrue(
-                np.allclose(simualted_optical_frame.t, desired_optical_frame.t),
-                "Simulated optical frame translation should match Zivid optical frame translation",
-            )
-            self.assertTrue(
-                np.allclose(simualted_optical_frame.rot.as_quat(), desired_optical_frame.rot.as_quat()),
-                "Simulated optical frame rotation should match Zivid optical frame rotation",
-            )
-
-    async def test_set_aperture(self):
-
-        self.zivid_prim.set_world_pose(position=[0.0, 0.0, 0.30])
-        cracker_box_usd_path = get_assets_root_path() + "/Isaac/Props/YCB/Axis_Aligned/003_cracker_box.usd"
-
-        add_reference_to_stage(
-            usd_path=cracker_box_usd_path,
-            prim_path="/World/CrackerBox",
+        new_pose = Transform(
+            t=np.array([0.5, 0.0, 1.0]),
+            rot=Rotation.from_axis_angle(np.array([0.0, np.pi / 2, 0.0])),
         )
+        zivid_camera.set_world_pose(new_pose)
+        await self.wait_n_updates(1)
+        prim_pose = Transform.from_isaac_sim(self.zivid_prim.get_world_pose())
+        self.assertTranformsAlmostEqual(prim_pose, new_pose, places=6)
+        self.assertTranformsAlmostEqual(new_pose, zivid_camera.get_world_pose(), places=6)
 
-        await update_stage_async()
-
+    async def test_set_local_pose(self):
+        prim_utils.create_prim("/World/Parent", "Xform")
+        parent_prim = SingleXFormPrim(prim_path="/World/Parent")
+        parent_pose = Transform(
+            t=np.array([0.5, 0.5, 0.5]),
+            rot=Rotation.from_euler(np.array([10.0, 10.0, 10.0]), degrees=True),
+        )
+        parent_prim.set_world_pose(*parent_pose.to_isaac_sim())
         model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
-        zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
+        zivid_camera = ZividCamera(model_name=model_name, prim_path=parent_prim.prim_path + "/ZividCamera")
         zivid_camera.initialize()
-        await self.wait_n_updates(8)
-
-        focuses = []
-        for apertuere in range(-4, 5):
-            zivid_camera.set_lens_aperture(apertuere)
-            await self.wait_n_updates(1)
-            rgb = zivid_camera.get_data_rgb()
-            save_path = self.test_output_dir / f"apertue_{apertuere}.png"
-            plt.imsave(save_path, rgb)
-            focuses.append(_estimate_focus(rgb))
-
-        for i in range(len(focuses) - 1):
-            self.assertGreater(focuses[i], focuses[i + 1] - 2e-1, "Focus should decrease with increasing aperture")
-
-    async def test_focus_distance(self):
-
-        model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
-        zivid_camera = ZividCamera(model_name=model_name, prim_path=self.zivid_prim_path)
-        zivid_camera.initialize()
-
+        local_pose = Transform(
+            t=np.array([0.2, 0.3, 0.2]), rot=Rotation.from_euler(np.array([20.0, 30.0, 40.0]), degrees=True)
+        )
+        zivid_camera.set_local_pose(local_pose)
         await self.wait_n_updates(1)
 
-        for model_names in ZividCameraModelName:
-            zivid_camera.set_camera_model(model_names)
-            focus_distance = zivid_camera.get_focus_distance()
-            self.assertTrue(
-                abs(focus_distance - zivid_camera.get_camera_sensor().get_focus_distance()) < 1e-6,
-                "Focus distance written to the simulator does not match expected value",
-            )
-
-
-def _estimate_focus(image: np.ndarray) -> float:
-    if image.ndim == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    variance = laplacian.var()
-    return variance
+        self.assertTranformsAlmostEqual(parent_pose * local_pose, zivid_camera.get_world_pose(), places=6)
+        self.assertTranformsAlmostEqual(local_pose, zivid_camera.get_local_pose(), places=6)

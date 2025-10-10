@@ -1,7 +1,9 @@
 import numpy as np
+import omni.kit.commands
 from isaacsim.core.utils import prims as prim_utils
-from isaacsim.zivid.utilities.transforms import Transform
-from pxr import Gf, UsdPhysics
+from isaacsim.sensors.camera import Camera
+from isaacsim.zivid.transforms import Transform
+from pxr import Gf, Sdf, UsdPhysics
 
 
 def create_fixed_joint(
@@ -26,3 +28,22 @@ def create_fixed_joint(
     fixed_joint.GetLocalRot1Attr().Set(Gf.Quatf(*np.array([1, 0, 0, 0]).astype(float)))
 
     return fixed_joint
+
+
+def lock_camera(camera: Camera, lock: bool = True) -> None:
+    omni.kit.commands.execute(
+        "ChangePropertyCommand",
+        prop_path=Sdf.Path(f"{camera.prim_path}.omni:kit:cameraLock"),
+        value=lock,
+        prev=None,
+        type_to_create_if_not_exist=Sdf.ValueTypeNames.Bool,
+    )
+
+
+def hide_camera_icon(camera: Camera) -> None:
+    omni.kit.commands.execute(
+        "ToggleVisibilitySelectedPrims",
+        selected_paths=[camera.prim_path],
+        stage=omni.usd.get_context().get_stage(),
+        visible=False,
+    )

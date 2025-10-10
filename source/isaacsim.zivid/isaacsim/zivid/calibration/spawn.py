@@ -3,8 +3,8 @@ from pathlib import Path
 from isaacsim.core.prims import SingleXFormPrim
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.zivid.calibration.calibration_board import BoardID
+from isaacsim.zivid.transforms import Transform
 from isaacsim.zivid.utilities.assets import get_assets_path
-from isaacsim.zivid.utilities.transforms import Transform
 
 
 def spawn_calibration_board(board_id: BoardID, prim_path: str, world_pose: Transform) -> SingleXFormPrim:

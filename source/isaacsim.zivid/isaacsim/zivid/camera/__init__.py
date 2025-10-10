@@ -1,5 +1,5 @@
 from .models import ZividCameraModelName
-from .resolution import SamplingMode
+from .sampling import SamplingMode
 from .spawn import spawn_zivid_casing
 from .zivid_camera import ZividCamera
 

@@ -9,13 +9,12 @@ from isaacsim.core.utils.stage import create_new_stage_async, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.zivid.calibration.calibration_board import BoardID
 from isaacsim.zivid.calibration.spawn import spawn_calibration_board
-from isaacsim.zivid.utilities.transforms import Rotation, Transform, rot_diff
+from isaacsim.zivid.transforms import Rotation, Transform
+from isaacsim.zivid.utilities.test_utils import BaseTest
 from pxr import UsdLux, UsdPhysics
 
 
-# Having a test class dervived from omni.kit.test.AsyncTestCase declared on the
-# root of module will make it auto-discoverable by omni.kit.test
-class Test(omni.kit.test.AsyncTestCase):
+class Test(BaseTest):
     # Before running each test
     # Before running each test
     async def setUp(self):  # pylint: disable=invalid-name
@@ -56,14 +55,6 @@ class Test(omni.kit.test.AsyncTestCase):
             await asyncio.sleep(1.0)
         await omni.kit.app.get_app().next_update_async()
         return
-
-    def assertTranformsAlmostEqual(
-        self, a: Transform, b: Transform, places: int | None = None
-    ):  # pylint: disable=invalid-name
-        diff = np.linalg.norm(a.t - b.t)
-        self.assertAlmostEqual(diff, 0, msg="Translation part of transform does not match", places=places)
-        diff = rot_diff(a.rot, b.rot).mag()
-        self.assertAlmostEqual(diff, 0, msg="Rotation part of transform does not match", places=places)
 
     async def test_spawn_calibration_board(self):
         init_pose = Transform(t=np.array([0.0, 0.0, 1.0]), rot=Rotation.identity())

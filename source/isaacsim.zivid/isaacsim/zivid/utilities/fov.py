@@ -2,7 +2,7 @@ import carb
 import numpy as np
 from isaacsim.util.debug_draw._debug_draw import acquire_debug_draw_interface
 from isaacsim.zivid.camera.zivid_camera import ZividCamera
-from isaacsim.zivid.utilities.transforms import transform_points
+from isaacsim.zivid.transforms import transform_points
 
 
 def _filter_nan_points(points: np.ndarray) -> np.ndarray:
@@ -11,11 +11,11 @@ def _filter_nan_points(points: np.ndarray) -> np.ndarray:
 
 
 def draw_fov(zivid_camera: ZividCamera):
-    xyz = zivid_camera.get_data_xyz()[::100, ::100]  # downsample for performance
+    xyz = zivid_camera.get_frame().get_data_xyz()[::100, ::100]  # downsample for performance
 
     xyz = transform_points(
         xyz,
-        zivid_camera.get_sensor_world_pose(),
+        zivid_camera.get_camera_sensor_world_pose(),
     )
 
     # Flatten and filter
