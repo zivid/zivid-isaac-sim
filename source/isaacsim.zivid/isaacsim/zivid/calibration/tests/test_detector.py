@@ -8,20 +8,25 @@ import omni.usd
 from isaacsim.core.api import World
 from isaacsim.core.utils.stage import create_new_stage_async, update_stage_async
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.zivid.calibration.detector import detect_calibration_board
-from isaacsim.zivid.utilities.transforms import Transform, rot_diff
+from isaacsim.zivid.calibration.calibration_board import BoardID
+from isaacsim.zivid.calibration.detection_result import DetectionStatus
+from isaacsim.zivid.calibration.detector import (
+    detect_calibration_board,
+    draw_corners,
+    get_ground_truth_feature_points_3d,
+)
+from isaacsim.zivid.frame import Frame
+from isaacsim.zivid.transforms import Rotation, Transform
+from isaacsim.zivid.utilities.test_utils import BaseTest
 from pxr import UsdLux
 
 
-# Having a test class dervived from omni.kit.test.AsyncTestCase declared on the
-# root of module will make it auto-discoverable by omni.kit.test
-class Test(omni.kit.test.AsyncTestCase):
-    # Before running each test
-    # Before running each test
+class Test(BaseTest):
     async def setUp(self):  # pylint: disable=invalid-name
 
         await create_new_stage_async()
         self.my_world = World(stage_units_in_meters=1.0)
+        assert isinstance(self.my_world, World)
         await self.my_world.initialize_simulation_context_async()
         await update_stage_async()
         self.test_data_dir = Path(__file__).parents[6] / "test_data/calibration"
@@ -57,18 +62,51 @@ class Test(omni.kit.test.AsyncTestCase):
         await omni.kit.app.get_app().next_update_async()
         return
 
-    def assertTranformsAlmostEqual(
-        self, a: Transform, b: Transform, places: int | None = None
-    ):  # pylint: disable=invalid-name
-        diff = np.linalg.norm(a.t - b.t)
-        self.assertAlmostEqual(diff, 0, msg="Translation part of transform does not match", places=places)
-        diff = rot_diff(a.rot, b.rot).mag()
-        self.assertAlmostEqual(diff, 0, msg="Rotation part of transform does not match", places=places)
-
     async def test_detector(self):
         pngs = [self.test_data_dir / "cb01.png", self.test_data_dir / "cb02.png"]
         for png in pngs:
             rgb = cv2.imread(str(png))
+            xyz = np.ones_like(rgb, dtype=np.float32)
+            frame = Frame(rgb=rgb, xyz=xyz)
+            detection_result = detect_calibration_board(frame)
+            self.assertTrue(detection_result.valid(), f"Detection failed for {png}")
 
-            board = detect_calibration_board(rgb)
-            self.assertIsNotNone(board, f"Failed to detect calibration board in image {png}")
+            rgb_corners = draw_corners(frame, detection_result)
+            self.assertArraysAlmostEqual(rgb_corners, rgb, quantile_thresholds={99: 1e-7})
+            self.assertFalse(np.allclose(rgb_corners, rgb))
+
+            xyz[:] = np.nan
+            frame = Frame(rgb=rgb, xyz=xyz)
+            detection_result = detect_calibration_board(frame)
+            self.assertFalse(detection_result.valid(), f"Detection should fail for {png} with no depth")
+            self.assertEqual(
+                detection_result.status,
+                DetectionStatus.INSUFFICIENT_3D_QUALITY,
+                "Detection status should be INSUFFICIENT_3D_QUALITY",
+            )
+            self.assertRaises(ValueError, draw_corners, frame, detection_result)
+
+    def test_get_ground_truth_feature_points_3d(self):
+
+        for transform in [
+            Transform.identity(),
+            Transform(t=np.array([1.0, 2.0, 3.0]), rot=Rotation.from_euler(np.array([0.1, 0.2, 0.3]))),
+        ]:
+            for board_id in BoardID:
+                feature_points_3d = get_ground_truth_feature_points_3d(board_id, transform)
+
+                rows, cols = {BoardID.ZVDCB01: (6, 7), BoardID.ZVDCB02: (4, 5)}[board_id]
+                checker_size = {BoardID.ZVDCB01: 30 * 1e-3, BoardID.ZVDCB02: 20 * 1e-3}[board_id]
+                expected_feature_points_3d = np.zeros((rows, cols, 3), dtype=np.float32)
+                x = 0.0
+                y = 0.0
+                for c in range(cols):
+                    for r in range(rows):
+                        expected_feature_points_3d[r, c] = transform * np.array([x, y, 0.0])
+                        y += checker_size
+                    y = 0.0
+                    x += checker_size
+
+                self.assertArraysAlmostEqual(
+                    feature_points_3d, expected_feature_points_3d, places=7, quantile_thresholds={99: 5e-6}
+                )

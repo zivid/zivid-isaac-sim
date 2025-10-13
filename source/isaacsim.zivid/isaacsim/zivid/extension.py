@@ -31,7 +31,7 @@ from isaacsim.zivid.calibration import BoardID, spawn_calibration_board
 from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName, spawn_zivid_casing
 from isaacsim.zivid.gui import CameraWidget, NewCameraWindow
 from isaacsim.zivid.mounts import Mount
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
 
 
 def get_applicable_parent(rigid: pxr.Usd.Prim) -> Optional[pxr.Usd.Prim]:
@@ -119,7 +119,7 @@ class ZividExtension(omni.ext.IExt):
             ),
         ]
 
-        omni.kit.menu.utils.add_menu_items(self._menu_list, "Create")
+        menu_utils.add_menu_items(self._menu_list, "Create")
 
         self._cameras = []
 
@@ -142,6 +142,8 @@ class ZividExtension(omni.ext.IExt):
                 if prim.GetAttribute("is_zivid_camera"):
                     model = ZividCameraModelName(prim.GetAttribute("zivid_camera_model").Get())
                     self._create_camera(str(prim.GetPath()), model)
+        elif event.type == int(omni.usd.StageEventType.CLOSING):
+            self._cleanup_cameras()
 
     def _create_camera_prim(self, mount_prim, manipulator_prim, camera, mount=Mount.OA111):
         mount_local_pose = Transform(
@@ -158,7 +160,6 @@ class ZividExtension(omni.ext.IExt):
                 world_pose = Transform.from_isaac_sim(SingleRigidPrim(mount_prim).get_world_pose())
 
             zivid_prim = spawn_zivid_casing(
-                model_name=camera,
                 prim_path=str(mount_prim) + "/Zivid",
                 world_pose=world_pose,
                 make_rigid_body=False,
@@ -192,7 +193,7 @@ class ZividExtension(omni.ext.IExt):
         c = ZividCamera(model_name=model_name, prim_path=prim_path)
         c.initialize()
         self._cameras.append(c)
-        self._refresh_menu(c)
+        self._refresh_menu()
 
     def _has_applicable_selection(self, _context):
         return self._get_applicable_prims() is not None
@@ -214,25 +215,40 @@ class ZividExtension(omni.ext.IExt):
 
         return None
 
-    def _refresh_menu(self, new_camera: ZividCamera):
+    def _refresh_menu(self):
         assert self._camera_menu_items is not None
-        if len(self._camera_menu_items) > 0:
-            menu_utils.remove_menu_items(self._camera_menu_items, "Zivid Cameras")
 
-        self._camera_menu_items.append(
-            menu_utils.MenuItemDescription(
-                name=f"Camera {new_camera.prim_path}", onclick_action=(self._ext_id, "open_camera_widget", new_camera)
+        new_list = list(
+            map(
+                lambda c: menu_utils.MenuItemDescription(
+                    name=f"Camera {c.prim_path}",
+                    onclick_action=(self._ext_id, "open_camera_widget", c),
+                ),
+                self._cameras,
             )
         )
-        menu_utils.add_menu_items(self._camera_menu_items, "Zivid Cameras")
+        if len(self._camera_menu_items) == 0:
+            menu_utils.add_menu_items(new_list, "Zivid Cameras")
+        elif len(new_list) == 0:
+            menu_utils.remove_menu_items(self._camera_menu_items, "Zivid Cameras")
+        else:
+            menu_utils.replace_menu_items(new_list, self._camera_menu_items, "Zivid Cameras")
+
+        menu_utils.rebuild_menus()
+
+        self._camera_menu_items = new_list
 
     def _open_new_camera_window(self):
         assert self._new_camera_window is not None
         self._new_camera_window.open(free_standing=True)
 
-    def _open_new_camera_window_from_context(self):
+    def _open_new_camera_window_from_context(self, _context):
         assert self._new_camera_window is not None
         self._new_camera_window.open(free_standing=False)
+
+    def _cleanup_cameras(self):
+        self._cameras = []
+        self._refresh_menu()
 
     def on_shutdown(self):
         if self._menu_list is not None:

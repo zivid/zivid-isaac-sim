@@ -12,7 +12,7 @@
 import argparse
 
 import numpy as np
-from isaacsim import SimulationApp
+from isaacsim import SimulationApp  # pyright: ignore
 
 parser = argparse.ArgumentParser(description="Example script with --headless flag")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -30,8 +30,8 @@ enable_zivid_extension()  # enable the Zivid extension
 from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName, spawn_zivid_casing
+from isaacsim.zivid.transforms import Rotation, Transform
 from isaacsim.zivid.utilities.fov import draw_fov
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
 
 my_world = World(stage_units_in_meters=1.0)
 assert isinstance(my_world, World), "World instance should be created successfully"
@@ -50,13 +50,10 @@ zivid_prim_path = "/World/ZividCamera"
 
 
 zivid_prim = spawn_zivid_casing(
-    model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
 )
-
-
 zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim_path)
 
 # initialize the world
@@ -65,15 +62,10 @@ zivid_camera.initialize()
 
 
 i = 0
-
-
 while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():
     my_world.step(render=True)  # step the world
-    # arm.set_joint_positions(arm.get_joints_default_state().positions)
-    rgb = zivid_camera.get_data_rgb()
     if i > 0 and i % 10 == 0:
         draw_fov(zivid_camera)
-
     i += 1
 
 

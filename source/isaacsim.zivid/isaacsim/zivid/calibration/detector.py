@@ -1,66 +1,21 @@
 from __future__ import annotations
 
-import cv2
-import cv2.aruco as aruco
-import numpy as np
 from isaacsim.zivid.calibration.calibration_board import BoardID
+from isaacsim.zivid.calibration.detection_result import DetectionResult
+from isaacsim.zivid.frame import Frame
+from isaacsim.zivid.transforms import Transform
+from numpy.typing import NDArray
+
+from ._impl import detector_impl as impl
 
 
-def detect_calibration_board(rgb: np.ndarray) -> None | np.ndarray:
-    aruco_id = _classify_board_from_image(rgb)
-    if aruco_id is None:
-        return None
-
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-    checker_shape = _get_board_shape(aruco_id)
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    ret, corners = cv2.findChessboardCornersSB(gray, checker_shape, cv2.CALIB_CB_EXHAUSTIVE)
-    if not ret:
-        return None
-    return cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+def detect_calibration_board(frame: Frame) -> DetectionResult:
+    return impl.detect_calibration_board_impl(frame)
 
 
-def _classify_board_from_image(image: np.ndarray) -> BoardID | None:
-    """Classify the board ID from an image using ArUco markers."""
-    ids = _detect_aruco_ids(image)
-
-    if ids is None or len(ids) != 1:
-        return None
-
-    # Assuming only one marker is present in the image
-    aruco_id = ids[0][0]  # Extract the first ID from the array
-    return _classify_by_aruco_id(aruco_id)
+def draw_corners(frame: Frame, detection_result: DetectionResult) -> NDArray:
+    return impl.draw_corners_impl(frame, detection_result)
 
 
-def _detect_aruco_ids(image: np.ndarray) -> np.ndarray | None:
-    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_250)
-    parameters = aruco.DetectorParameters()
-    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-    # Detect the markers
-    _, ids, _ = aruco.ArucoDetector(aruco_dict, parameters).detectMarkers(gray)
-
-    return ids
-
-
-def _classify_by_aruco_id(aruco_id: int) -> BoardID | None:
-    """Classify the board ID based on the ArUco ID."""
-
-    match aruco_id:
-        case 1:
-            return BoardID.ZVDCB01
-        case 239:
-            return BoardID.ZVDCB02
-        case _:
-            return None
-
-
-def _get_board_shape(board_id: BoardID) -> tuple[int, int]:
-    """Get the shape of the calibration board based on its ID."""
-    match board_id:
-        case BoardID.ZVDCB01:
-            return (7, 6)
-        case BoardID.ZVDCB02:
-            return (5, 4)
-        case _:
-            raise ValueError(f"Unknown calibration board ID: {board_id}")
+def get_ground_truth_feature_points_3d(board_id: BoardID, board_pose: Transform) -> NDArray:
+    return impl.get_ground_truth_feature_points_3d_impl(board_id, board_pose)

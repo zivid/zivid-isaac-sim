@@ -1,24 +1,6 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from enum import IntEnum
-
 from isaacsim.zivid.camera.models import ZividCameraModelName
-
-
-class SamplingMode(IntEnum):
-    FULL = 0
-    DOWNSAMPLE2X2 = 1
-    DOWNSAMPLE4X4 = 2
-
-
-@dataclass
-class Resolution:
-    width: int
-    height: int
-
-    def as_tuple(self) -> tuple[int, int]:
-        return (self.width, self.height)
+from isaacsim.zivid.camera.sampling import SamplingMode
+from isaacsim.zivid.resolution import Resolution
 
 
 def get_camera_resolution(sampling_mode: SamplingMode, model_name: ZividCameraModelName) -> Resolution:
@@ -36,8 +18,8 @@ def get_camera_resolution(sampling_mode: SamplingMode, model_name: ZividCameraMo
 
 def get_projector_resolution(model_name: ZividCameraModelName) -> Resolution:
     if model_name in [ZividCameraModelName.ZIVID_2_M70, ZividCameraModelName.ZIVID_2_L100]:
-        return Resolution(width=1280 // 4, height=720 // 4)
-    return Resolution(width=1000 // 4, height=720 // 4)
+        return Resolution(width=1280, height=720)
+    return Resolution(width=1000, height=720)
 
 
 def _get_full_res(model_name: ZividCameraModelName) -> Resolution:

@@ -12,7 +12,7 @@
 import argparse
 
 import numpy as np
-from isaacsim import SimulationApp
+from isaacsim import SimulationApp  # pyright: ignore
 
 parser = argparse.ArgumentParser(description="Example script with --headless flag")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -31,7 +31,7 @@ from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.zivid.calibration import BoardID, spawn_calibration_board
 from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName, spawn_zivid_casing
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
 from omni.kit.viewport.utility import get_active_viewport
 
 my_world = World(stage_units_in_meters=1.0)
@@ -48,7 +48,6 @@ zivid_prim_path = "/World/ZividCamera"
 
 
 spawn_zivid_casing(
-    model_name=model_name,
     prim_path=zivid_prim_path,
     world_pose=zivid_pose,
     make_rigid_body=False,
@@ -73,24 +72,24 @@ my_world.reset()
 zivid_camera.initialize()
 
 
-stops = list(range(-5, 5))
-num_stops = len(stops)
+f_numbers = [1.4, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0, 32.0]
+num_stops = len(f_numbers)
 
-stop_counter = 0
-zivid_camera.set_lens_aperture(stops[stop_counter])  # set initial aperture
+
 viewport = get_active_viewport()
-viewport.camera_path = zivid_camera.get_camera_sensor().prim_path  # set the viewport camera to the Zivid camera
+viewport.camera_path = zivid_camera.get_camera_sensor_prim_path()  # set the viewport camera to the Zivid camera
 
 i = 0
+stop_counter = 0
 while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():
     my_world.step(render=True)  # step the world
-    rgb = zivid_camera.get_data_rgb()
     if i > 0 and i % 20 == 0 and stop_counter < num_stops:
-        print(f"Stop: {stops[stop_counter]}")
+        fnum = f_numbers[stop_counter]
+        print(f"Setting aperture to f/{fnum}")
         stop_counter += 1
         if stop_counter >= num_stops:
             stop_counter = 0
-        zivid_camera.set_lens_aperture(stops[stop_counter])  # set initial aperture
+        zivid_camera.set_lens_aperture(fnum)
 
     i += 1
 

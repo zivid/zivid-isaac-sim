@@ -13,7 +13,7 @@ For more information on how to use the extension, check out our [Knowledge Base 
 
 ## Installation
 
-1. Ensure you have a working [NVIDIA Isaac Sim installation]. The minimum version is **4.5.0**.
+1. Ensure you have a working [NVIDIA Isaac Sim installation]. The minimum version is **5.0.0**.
 
 2. Clone the Zivid Isaac Sim repository:
 
@@ -23,6 +23,12 @@ For more information on how to use the extension, check out our [Knowledge Base 
 
 3. Follow the [official instructions] on how to install and enable extensions
    in Isaac Sim.
+
+   **NOTE:** To enable the extension directly, pass the following args when launching IsaacSim:
+
+   ```sh
+   --ext-folder path/to/source/ --enable isaacsim.zivid
+   ```
 
 ## Getting started
 
@@ -77,3 +83,20 @@ Zivid Samples are distributed under the [BSD license](https://github.com/zivid/z
 [NVIDIA Isaac Sim installation]: https://docs.isaacsim.omniverse.nvidia.com/4.5.0/installation/index.html
 [official instructions]: https://docs.isaacsim.omniverse.nvidia.com/4.5.0/utilities/updating_extensions.html
 [header-image]: https://www.zivid.com/hubfs/softwarefiles/images/zivid-generic-github-header.png
+
+## VSCode Setup
+
+To correctly configure the Visual Studio Code Python Language Service, first generate the .vscode/settings.json file by running:
+
+```shell
+/path/to/isaacsim/python/exe -m isaacsim --generate-vscode-settings
+```
+
+In addition add the following entry to '.vscode/settings.json'
+
+```json
+"python.analysis.extraPaths": [
+   path/to/source/isaacsim.zivid,
+   ...,
+]
+```

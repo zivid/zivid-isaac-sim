@@ -15,7 +15,7 @@ import sys
 
 import carb
 import numpy as np
-from isaacsim import SimulationApp
+from isaacsim import SimulationApp  # pyright: ignore
 
 parser = argparse.ArgumentParser(description="Example script with --headless flag")
 parser.add_argument("--headless", action="store_true", help="Run in headless mode")
@@ -32,13 +32,14 @@ enable_zivid_extension()  # enable the Zivid extension
 
 from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.prims import Articulation
-from isaacsim.core.utils.stage import add_reference_to_stage, get_stage_units
+from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.utils.viewports import set_camera_view
 from isaacsim.storage.native import get_assets_root_path
 from isaacsim.zivid.assembler import assemble_zivid_casing_on_robot
 from isaacsim.zivid.camera import ZividCamera, ZividCameraModelName
 from isaacsim.zivid.mounts import Mount
-from isaacsim.zivid.utilities.transforms import Rotation, Transform
+from isaacsim.zivid.transforms import Rotation, Transform
+from isaacsim.zivid.utilities.assets import AssetPaths
 
 # preparing the scene
 assets_root_path = get_assets_root_path()
@@ -55,40 +56,30 @@ set_camera_view(
 )  # set camera view
 
 # Add Franka
-asset_path = assets_root_path + "/Isaac/Robots/Franka/franka.usd"
 
-
-add_reference_to_stage(usd_path=asset_path, prim_path="/World/Arm")  # add robot to stage
-arm = Articulation(prim_paths_expr="/World/Arm", name="my_arm")  # create an articulation object
-
-
-# set the initial poses of the arm and the car so they don't collide BEFORE the simulation starts
-arm.set_world_poses(positions=np.array([[0.0, 1.0, 0.0]]) / get_stage_units())
+add_reference_to_stage(usd_path=str(AssetPaths.franka), prim_path="/World/Franka")  # add robot to stage
 
 
 mount = Mount.OA121
-
 hand_eye = Transform(
     rot=Rotation.from_matrix(np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])), t=np.array([0.05, -0.05, 0.02])
 )
 
 model_name = ZividCameraModelName.ZIVID_2_PLUS_M130
-
-zivid_prim_path = assemble_zivid_casing_on_robot(
+robot_assembly = assemble_zivid_casing_on_robot(
     model_name=model_name,
-    attach_prim_path="/World/Arm/panda_hand",
-    robot_prim_path="/World/Arm",
+    attach_prim_path="/World/Franka/panda_hand",
+    robot_prim_path="/World/Franka",
     mount=mount,
     handeye_calibration=hand_eye,
-).zivid_prim.prim_path
+)
 
-
-zivid_camera = ZividCamera(model_name=model_name, prim_path=zivid_prim_path)
-
-
+zivid_camera = ZividCamera(model_name=model_name, prim_path=robot_assembly.zivid_prim.prim_path)
+arm = Articulation(prim_paths_expr="/World/Franka", name="franka")
 # initialize the world
 my_world.reset()
 zivid_camera.initialize()
+arm.initialize()
 
 i = 0
 while (i < args.num_frames or args.num_frames == -1) and simulation_app.is_running():

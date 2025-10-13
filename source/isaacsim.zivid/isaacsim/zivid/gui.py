@@ -159,7 +159,7 @@ class CameraWidget:
 
     def _capture_button_clicked(self):
         assert self._camera is not None
-        data = self._camera.get_data_rgb()
+        data = self._camera.get_frame().get_data_rgb()
         if data.size != 0:
             assert data.dtype == np.uint8, "Data should be of type uint8"
             h, w, c = data.shape
@@ -243,6 +243,7 @@ class CameraWidget:
                 self._height_widget.enabled = False
 
     def _on_visualize_fov_clicked(self, on):
+        assert self._camera is not None
         if on:
             draw_fov(self._camera)
         else:
@@ -250,7 +251,7 @@ class CameraWidget:
 
     def _refresh_ui(self, camera: ZividCamera):
         self._camera = camera
-        self._model_dropdown.set_selection(camera.get_camera_model().name.name)
+        self._model_dropdown.set_selection(camera.model_name.name)
         self._window.title = f"Camera {self._camera.prim_path}"
 
     def open(self, camera: ZividCamera):

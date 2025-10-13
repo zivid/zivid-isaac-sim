@@ -1,304 +1,199 @@
 from __future__ import annotations
 
-import numpy as np
-from isaacsim.core.api.sensors.base_sensor import BaseSensor
-from isaacsim.core.prims import SingleXFormPrim
-from isaacsim.core.utils import prims as prim_utils
-from isaacsim.sensors.camera import Camera
-from isaacsim.zivid.camera.camera_calibration import CameraCalibration
 from isaacsim.zivid.camera.models import ZividCameraModelName
-from isaacsim.zivid.camera.resolution import Resolution, SamplingMode, get_camera_resolution, get_projector_resolution
-from isaacsim.zivid.camera.zivid_camera_model import ZividCameraModel
-from isaacsim.zivid.utilities.omniverse_camera_params import apply_model_params_to_camera, hide_camera_icon, lock_camera
-from isaacsim.zivid.utilities.transforms import Rotation, Transform, transform_points
+from isaacsim.zivid.camera.sampling import SamplingMode
+from isaacsim.zivid.frame import Frame
+from isaacsim.zivid.resolution import Resolution
+from isaacsim.zivid.transforms import Transform
 from numpy.typing import NDArray
-from pxr import Sdf
+
+from ._impl.zivid_camera_impl import ZividCameraImpl
 
 
-class ZividCamera(BaseSensor):
+class ZividCamera:
+    """
+    Class representing a Zivid camera in Isaac Sim.
+
+    This class provides the main interface for a simulated Zivid camera in Isaac Sim.
+    """
 
     def __init__(
         self, model_name: ZividCameraModelName, prim_path: str, sampling_mode: SamplingMode = SamplingMode.FULL
     ):
+        self.__impl = ZividCameraImpl(model_name, prim_path, sampling_mode)
 
-        self._camera_prim_path = prim_path
-        self._camera_sensor_prim_path = self._camera_prim_path + "/camera_sensor"
-        self._projector_prim_path = self._camera_prim_path + "/projector"
-        self._sampling_mode = sampling_mode
-        self._model_name = model_name
-        self._aparture = _stops_to_f_number(4)
-        self._camera_resolution = get_camera_resolution(self._sampling_mode, self._model_name)
-        self._projector_resolution = get_projector_resolution(self._model_name)
-        self._camera_model = ZividCameraModel.from_model_name(self._model_name, self._sampling_mode)
+    def __del__(self):
+        """Clean up resources by calling destroy."""
+        self.destroy()
 
-        zivid_prim = prim_utils.get_prim_at_path(prim_path)
-        zivid_prim.CreateAttribute("is_zivid_camera", Sdf.ValueTypeNames.Bool).Set(True)
-        zivid_prim.CreateAttribute("zivid_camera_model", Sdf.ValueTypeNames.Int).Set(int(model_name.value))
-
-        self._case = SingleXFormPrim(prim_path)
-
-        super().__init__(
-            prim_path=self._camera_prim_path,
-            name="zivid_camera",
-        )
-
-        self._setup_sensors()
-
-    def _setup_sensors(self) -> None:
-
-        self._camera_resolution = get_camera_resolution(self._sampling_mode, self._model_name)
-        self._projector_resolution = get_projector_resolution(self._model_name)
-        self._camera_model = ZividCameraModel.from_model_name(self._model_name, self._sampling_mode)
-        self._camera_sensor = Camera(
-            prim_path=self._camera_sensor_prim_path,
-            name="camera_sensor",
-            resolution=self._camera_resolution.as_tuple(),
-            orientation=(self._camera_model.optical_frame.rot * Rotation.y_down_z_forward().inverse())
-            .as_quat()
-            .tolist(),
-            translation=self._camera_model.optical_frame.t.tolist(),
-        )
-
-        self._projector = Camera(
-            prim_path=self._projector_prim_path,
-            name="projector",
-            resolution=self._projector_resolution.as_tuple(),
-            translation=self._camera_model.projector_frame().t.tolist(),
-            orientation=(self._camera_model.projector_frame().rot * Rotation.y_down_z_forward().inverse())
-            .as_quat()
-            .tolist(),
-        )
+    def destroy(self) -> None:
+        """Destroy the zivid camera by detaching all related annotators and render products."""
+        self.__impl.destroy()
 
     def initialize(self, physics_sim_view=None) -> None:
-        """Initialize the camera."""
-        super().initialize(physics_sim_view)
-        self._camera_sensor.initialize(physics_sim_view)
+        """
+        To be called before using this class after a reset of the world.
 
-        self._camera_sensor.set_resolution(self._camera_resolution.as_tuple())
-        self._camera_sensor.set_lens_aperture(self._aparture)
-        apply_model_params_to_camera(
-            camera=self._camera_sensor,
-            model_params=self._camera_model.camera_sensor_model,
-        )
-        self._camera_sensor.add_distance_to_image_plane_to_frame()
-        self._camera_sensor.add_distance_to_camera_to_frame()
-        lock_camera(self._camera_sensor)
-        hide_camera_icon(self._camera_sensor)
+        Args:
+            physics_sim_view (omni.physics.tensors.SimulationView, optional): Current physics simulation view.
+                Defaults to None.
+        """
+        self.__impl.initialize(physics_sim_view)
 
-        self._projector.initialize(physics_sim_view)
+    def set_world_pose(self, pose: Transform) -> None:
+        """
+        Set the world pose of the Zivid camera.
 
-        self._projector.set_resolution(self._projector_resolution.as_tuple())
-        self._camera_sensor.set_lens_aperture(0)  # zero aperture for projector
-        apply_model_params_to_camera(
-            camera=self._projector,
-            model_params=self._camera_model.projector_sensor_model,
-        )
-        self._projector.add_distance_to_image_plane_to_frame()
-        self._projector.add_distance_to_camera_to_frame()
-        lock_camera(self._projector)
-        hide_camera_icon(self._projector)
+        Args:
+            pose (Transform): The desired world pose of the Zivid camera.
+        """
+        self.__impl.set_world_pose(pose)
+
+    def set_local_pose(self, pose: Transform) -> None:
+        """
+        Set the local pose of the Zivid camera, relative to the prims parent.
+
+        Args:
+            pose (Transform): The desired local pose of the Zivid camera.
+        """
+        self.__impl.set_local_pose(pose)
 
     def set_camera_model(self, model_name: ZividCameraModelName) -> None:
-        if model_name != self._model_name:
-            self._model_name = model_name
-            self._setup_sensors()
-            self.prim.GetAttribute("zivid_camera_model").Set(int(model_name.value))
-            self.initialize()
+        """
+        Set the camera model of the Zivid camera and configure the sensors accordingly.
+
+        Args:
+            model_name (ZividCameraModelName): The camera model to set.
+        """
+        self.__impl.set_camera_model(model_name)
 
     def set_sampling_mode(self, sampling_mode: SamplingMode) -> None:
-        self._sampling_mode = sampling_mode
-        self._camera_resolution = get_camera_resolution(self._sampling_mode, self._model_name)
-        self._projector_resolution = get_projector_resolution(self._model_name)
-        self._camera_model = ZividCameraModel.from_model_name(
-            model_name=self._model_name,
-            sampling_mode=self._sampling_mode,
-        )
-        self._camera_sensor.set_resolution(self._camera_resolution.as_tuple())
-        apply_model_params_to_camera(
-            camera=self._camera_sensor,
-            model_params=self._camera_model.camera_sensor_model,
-        )
-        self._projector.set_resolution(self._projector_resolution.as_tuple())
-        apply_model_params_to_camera(
-            camera=self._projector,
-            model_params=self._camera_model.projector_sensor_model,
-        )
+        """Set the sampling mode of the Zivid camera and configure the sensors accordingly.
 
-    def get_camera_sensor(self) -> Camera:
-        """Get the camera sensor."""
+        Args:
+            sampling_mode (SamplingMode): The sampling mode to set.
+        """
+        self.__impl.set_sampling_mode(sampling_mode)
 
-        return self._camera_sensor
+    def set_lens_aperture(self, fnumber: float) -> None:
+        """
+        Set the lens aperture of the camera. The provided f-number will be rounded to the closest valid aperture. See:
+        https://support.zivid.com/en/latest/reference-articles/settings/2d-settings/2d-acquisition-settings/
+        aperture.html for details on valid apertures.
 
-    def get_projector(self) -> Camera:
-        """Get the projector."""
-        return self._projector
+        Args:
+            fnumber (float): The desired f-number to set.
+        """
+        self.__impl.set_lens_aperture(fnumber)
 
-    def set_lens_aperture(self, stops: int) -> None:
-        """Set the lens aperture of the camera."""
-        self._aparture = _stops_to_f_number(stops)
-        self._camera_sensor.set_lens_aperture(self._aparture)
+    def get_camera_sensor_prim_path(self) -> str:
+        """
+        Get the prim path of the Camera object simulating the camera sensor.
 
-    def get_calibration(self) -> CameraCalibration:
-        return self._camera_model.calibration
+        Returns:
+            str: The prim path of the camera sensor.
+        """
+        return self.__impl.get_camera_sensor_prim_path()
 
-    def get_camera_model(self) -> ZividCameraModel:
-        """Get the camera model."""
-        return self._camera_model
+    def get_projector_prim_path(self) -> str:
+        """
+        Get the prim path of the Camera object simulating the projector.
 
-    def get_focus_distance(self) -> float:
-        return self._camera_model.camera_sensor_model.focus_distance
+        Returns:
+            str: The prim path of the projector.
+        """
+
+        return self.__impl.get_projector_prim_path()
+
+    def get_frame(self) -> Frame:
+        """
+        Get the current frame from the camera, containing both RGB and XYZ data.
+
+        Returns:
+            Frame: The current frame from the camera.
+        """
+        return self.__impl.get_frame()
 
     def get_camera_resolution(self) -> Resolution:
-        w, h = self._camera_sensor.get_resolution()
-        return Resolution(width=w, height=h)
+        """
+        Get the resolution of the camera based on the current model and sampling mode.
 
-    def get_data_rgb(self) -> np.ndarray:
-        """Get the RGB data from the camera."""
-        return self._camera_sensor.get_rgb()
+        Returns:
+            Resolution: The resolution of the camera.
+        """
+        return self.__impl.get_camera_resolution()
 
-    def get_data_xyz(self) -> np.ndarray:
-        """Get the XYZ data from the camera."""
+    def get_world_pose(self) -> Transform:
+        """
+        Get the transform from world to of the cameras reference frame.
 
-        depth = self._camera_sensor.get_depth()
-        if depth is None:
-            return np.full(
-                (self._camera_resolution.height, self._camera_resolution.width, 3),
-                np.nan,
-                dtype=np.float32,
-            )
-        camera_matrix = self._camera_model.calibration.camera_model.camera_matrix
-        valid_camera = np.isfinite(depth)
-        xyz_camera = np.where(valid_camera[:, :, None], _unproject_depth(depth, camera_matrix), 1)
+        Returns:
+            Transform: The world pose of the Zivid Camera.
+        """
+        return self.__impl.get_world_pose()
 
-        depth = self._projector.get_depth()
-        camera_matrix = self._camera_model.calibration.projector_model.camera_matrix
-        valid = np.isfinite(depth)
-        xyz_projector = np.where(valid[:, :, None], _unproject_depth(depth, camera_matrix), 1)
+    def get_local_pose(self) -> Transform:
+        """
+        Get the transform from the parent prim to the Zivid cameras reference frame.
 
-        filtered_xyz = _filter_invisible_points(
-            xyz_camera,
-            xyz_projector,
-            self._camera_model.calibration,
-        )
+        Returns:
+            Transform: The local pose of the Zivid camera.
+        """
+        return self.__impl.get_local_pose()
 
-        return np.where(valid_camera[:, :, None], filtered_xyz, np.nan)
+    def get_camera_sensor_world_pose(self) -> Transform:
+        """
+        Get the transform from world to the camera sensor frame.
 
-    def get_case_world_pose(self) -> Transform:
-        """Get the case world pose."""
-        p, q = self._case.get_world_pose()
-        return Transform(
-            t=p,
-            rot=Rotation.from_quat(q),
-        )
-
-    def get_sensor_world_pose(self) -> Transform:
-        """Get the sensor world pose."""
-        p, q = self._camera_sensor.get_world_pose()
-        return Transform(
-            t=p,
-            rot=Rotation.from_quat(q) * Rotation.y_down_z_forward(),
-        )
+        Returns:
+            Transform: The world pose of the camera sensor.
+        """
+        return self.__impl.get_camera_sensor_world_pose()
 
     def get_projector_world_pose(self) -> Transform:
-        """Get the projector world pose."""
-        p, q = self._projector.get_world_pose()
-        return Transform(
-            t=p,
-            rot=Rotation.from_quat(q) * Rotation.y_down_z_forward(),
-        )
+        """Get the transform from world to the projector frame.
 
+        Returns:
+            Transform: The world pose of the projector.
+        """
+        return self.__impl.get_projector_world_pose()
 
-def _stops_to_f_number(stops: int) -> float:
-    """Convert stops to f-number."""
-    match stops:
-        case -5:
-            return 32
-        case -4:
-            return 22
-        case -3:
-            return 16
-        case -2:
-            return 11
-        case -1:
-            return 8
-        case 0:
-            return 5.6
-        case 1:
-            return 4.0
-        case 2:
-            return 2.8
-        case 3:
-            return 3
-        case 4:
-            return 1.4
-        case _:
-            raise ValueError("Stops must be integer between -5 and 4")
+    def get_focus_distance(self) -> float:
+        """
+        Get the focus distance of the camera in meters.
 
+        Returns:
+            float: The focus distance of the camera in meters.
+        """
+        return self.__impl.get_focus_distance()
 
-def _unproject_depth(depth: NDArray, camera_matrix: CameraCalibration.LensModel.CameraMatrix) -> NDArray:
-    """Unproject depth to 3D points."""
-    height, width = depth.shape
-    x, y = np.meshgrid(np.arange(width), np.arange(height))
-    x = (x - camera_matrix.cx) / camera_matrix.fx
-    y = (y - camera_matrix.cy) / camera_matrix.fy
-    z = np.where(np.isfinite(depth), depth, 0.0).astype(np.float32)
-    return np.stack((x * z, y * z, z), axis=-1)
+    def project_points(self, points: NDArray) -> NDArray:
+        """
+        Project 3D points in the camera frame to 2D pixel coordinates.
 
+        Args:
+            points (NDArray): A HxWx3 or Nx3 array of 3D points in the camera frame.
 
-def _project_to_camera(xyz: NDArray, camera_matrix: CameraCalibration.LensModel.CameraMatrix) -> NDArray:
-    h, w = xyz.shape[:2]
-    im = np.zeros((h, w, 2))
-    im[..., 0] = xyz[..., 0] * camera_matrix.fx / xyz[..., 2] + camera_matrix.cx
-    im[..., 1] = xyz[..., 1] * camera_matrix.fy / xyz[..., 2] + camera_matrix.cy
-    return im
+        Returns:
+            NDArray: A HxWx2 or Nx2 array of 2D pixel coordinates.
+        """
+        return self.__impl.project_points(points)
 
+    @property
+    def prim_path(self) -> str:
+        """
+        Get the prim path of the Zivid camera.
 
-def _filter_invisible_points(xyz_camera: NDArray, xyz_projector: NDArray, calibration: CameraCalibration) -> NDArray:
+        Returns:
+            str: The prim path of the Zivid camera.
+        """
+        return self.__impl.prim_path
 
-    camera_points_in_projector_frame = transform_points(xyz_camera, calibration.extriniscs.inverse())
-    camera_points_in_projector_plane = _project_to_camera(
-        camera_points_in_projector_frame, calibration.projector_model.camera_matrix
-    )
-    h, w, _ = xyz_projector.shape
-
-    out_of_fov = (
-        (camera_points_in_projector_plane[..., 0] < 0)
-        | (camera_points_in_projector_plane[..., 0] >= w)
-        | (camera_points_in_projector_plane[..., 1] < 0)
-        | (camera_points_in_projector_plane[..., 1] >= h)
-    ) | (camera_points_in_projector_frame[:, :, 2] < 0)
-
-    cliped_camera_points_in_projector_plane = camera_points_in_projector_plane.clip([0, 0], [w - 1, h - 1])
-
-    dx = cliped_camera_points_in_projector_plane[..., 0] % 1
-    dy = cliped_camera_points_in_projector_plane[..., 1] % 1
-    cliped_camera_points_in_projector_plane_int = cliped_camera_points_in_projector_plane.astype(int)
-    p11 = xyz_projector[
-        cliped_camera_points_in_projector_plane_int[..., 1],
-        cliped_camera_points_in_projector_plane_int[..., 0],
-        2,
-    ]
-    p12 = xyz_projector[
-        cliped_camera_points_in_projector_plane_int[..., 1],
-        np.clip(cliped_camera_points_in_projector_plane_int[..., 0] + 1, a_min=0, a_max=w - 1),
-        2,
-    ]
-    p21 = xyz_projector[
-        np.clip(cliped_camera_points_in_projector_plane_int[..., 1] + 1, a_min=0, a_max=h - 1),
-        cliped_camera_points_in_projector_plane_int[..., 0],
-        2,
-    ]
-    p22 = xyz_projector[
-        np.clip(cliped_camera_points_in_projector_plane_int[..., 1] + 1, a_min=0, a_max=h - 1),
-        np.clip(cliped_camera_points_in_projector_plane_int[..., 0] + 1, a_min=0, a_max=w - 1),
-        2,
-    ]
-
-    z1 = p11 * (1 - dx) + p12 * dx
-    z2 = p21 * (1 - dx) + p22 * dx
-    z_proj = z1 * (1 - dy) + z2 * dy
-    diff = np.abs(camera_points_in_projector_frame[:, :, 2] - z_proj)
-    projector_shadow = diff > 5e-3 * camera_points_in_projector_frame[:, :, 2]
-
-    mask = out_of_fov | projector_shadow
-    return np.where(mask[:, :, None], np.nan, xyz_camera)
+    @property
+    def model_name(self) -> ZividCameraModelName:
+        """
+        Get the model name of the Zivid camera.
+        Returns:
+            ZividCameraModelName: The model name of the Zivid camera.
+        """
+        return self.__impl.model_name

@@ -1,8 +1,10 @@
 from isaacsim.core.prims import SingleRigidPrim, SingleXFormPrim
 from isaacsim.core.utils.stage import add_reference_to_stage
-from isaacsim.zivid.mounts.mount_models import Mount, MountData
-from isaacsim.zivid.utilities.transforms import Transform
+from isaacsim.zivid.mounts.mount_models import Mount
+from isaacsim.zivid.transforms import Transform
 from pxr import PhysxSchema, UsdPhysics
+
+from ._internal.mount_data import MountData
 
 
 def spawn_mount(
