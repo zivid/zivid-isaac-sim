@@ -13,7 +13,7 @@ For more information on how to use the extension, check out our [Knowledge Base 
 
 ## Installation
 
-1. Ensure you have a working [NVIDIA Isaac Sim installation]. The minimum version is **5.0.0**.
+1. Ensure you have a working [NVIDIA Isaac Sim installation]. The minimum version is **6.0.1**.
 
 2. Clone the Zivid Isaac Sim repository:
 
@@ -80,8 +80,8 @@ please [open an issue](https://github.com/zivid/zivid-isaac-sim/issues) on our G
 
 Zivid Samples are distributed under the [BSD license](https://github.com/zivid/zivid-halcon-samples/tree/master/LICENSE).
 
-[NVIDIA Isaac Sim installation]: https://docs.isaacsim.omniverse.nvidia.com/4.5.0/installation/index.html
-[official instructions]: https://docs.isaacsim.omniverse.nvidia.com/4.5.0/utilities/updating_extensions.html
+[NVIDIA Isaac Sim installation]: https://docs.isaacsim.omniverse.nvidia.com/6.0.1/installation/index.html
+[official instructions]: https://docs.isaacsim.omniverse.nvidia.com/6.0.1/utilities/updating_extensions.html
 [header-image]: https://www.zivid.com/hubfs/softwarefiles/images/zivid-generic-github-header.png
 
 ## VSCode Setup

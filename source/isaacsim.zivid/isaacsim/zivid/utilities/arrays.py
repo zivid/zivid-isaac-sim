@@ -34,8 +34,8 @@ The keys are the name of the backend ("numpy", "torch", "warp") and the values a
 
 TENSOR_TYPE_CONVERSIONS = {
     "numpy": {wp.array: lambda x: x.numpy(), torch.Tensor: lambda x: x.detach().cpu().numpy()},
-    "torch": {wp.array: wp.torch.to_torch, np.ndarray: torch.from_numpy},
-    "warp": {np.array: wp.array, torch.Tensor: wp.torch.from_torch},
+    "torch": {wp.array: wp.to_torch, np.ndarray: torch.from_numpy},
+    "warp": {np.array: wp.array, torch.Tensor: wp.from_torch},
 }
 """A nested dictionary containing the conversion functions for each backend.
 
