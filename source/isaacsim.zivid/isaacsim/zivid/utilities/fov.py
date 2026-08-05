@@ -1,6 +1,6 @@
 import carb
 import numpy as np
-from isaacsim.util.debug_draw._debug_draw import acquire_debug_draw_interface
+from isaacsim.util.debug_draw.bindings._debug_draw import acquire_debug_draw_interface
 from isaacsim.zivid.camera.zivid_camera import ZividCamera
 from isaacsim.zivid.transforms import transform_points
 

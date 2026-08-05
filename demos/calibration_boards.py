@@ -31,7 +31,7 @@ enable_zivid_extension()
 
 from isaacsim.core.api import World  # pylint: disable=C0412
 from isaacsim.core.utils.viewports import set_camera_view
-from isaacsim.util.debug_draw._debug_draw import acquire_debug_draw_interface
+from isaacsim.util.debug_draw.bindings._debug_draw import acquire_debug_draw_interface
 from isaacsim.zivid.calibration import BoardID, DetectionResult, detect_calibration_board, spawn_calibration_board
 from isaacsim.zivid.camera import SamplingMode, ZividCameraModelName
 from isaacsim.zivid.camera.spawn import spawn_zivid_casing
